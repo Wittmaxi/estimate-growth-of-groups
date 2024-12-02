@@ -200,11 +200,14 @@ class GraphInputGUI:
                 inverse_v = f"-{v}"
                 if inverse_v in beta:
                     return False
-        # For each vertex in alpha, check if link(v) ∩ (β \ α) is empty
-        for v in alpha:
-            link_v = set(self.graph.neighbors(v))
-            if not link_v.isdisjoint(beta - alpha):  # If there is an intersection
-                return False
+                
+
+        common_link = set(self.graph.nodes())
+        for node in alpha:
+            common_link = common_link.intersection(set(self.graph.neighbors(node)))
+
+        if not common_link.isdisjoint(beta - alpha):  # If there is an intersection
+            return False
         return True
         
 

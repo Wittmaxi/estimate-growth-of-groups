@@ -7,6 +7,9 @@ import itertools
 import numpy as np
 from numpy import linalg as LA
 from dask.array import argmax
+from referencing.tests.test_core import blow_up
+from tkinter import filedialog
+import pickle
 
 class GraphInputGUI:
     def __init__(self, root):
@@ -33,25 +36,49 @@ class GraphInputGUI:
         # Graph visualization canvas
         self.graph_canvas_frame = tk.Frame(root)
         self.graph_canvas_frame.grid(row=2, column=0, columnspan=4, padx=5, pady=5)
+
+        self.eigenwert_label = tk.Label(root, text="No eigenvalue calculated yet")
+        self.eigenwert_label.grid(row=3, columnspan=5)
         
         # Calculate button
-        tk.Button(root, text="Calculate", command=self.calculate).grid(row=3, column=0, columnspan=4, pady=10)
+        tk.Button(root, text="Calculate", command=self.calculate).grid(row=4, column=0)
         
-        tk.Button(root, text="two point blow-up", command=self.blowup).grid(row=4, column=0, columnspan=4, pady=10)
+        tk.Button(root, text="two point blow-up", command=self.blowup).grid(row=4, column=1)
         
-        tk.Button(root, text="undo two point blow-up", command=self.unblowup).grid(row=5, column=0, columnspan=4, pady=10)
-        
-        tk.Button(root, text="do the line", command=self.line).grid(row=6, column=0, columnspan=4, pady=10)
+        tk.Button(root, text="undo two point blow-up", command=self.unblowup).grid(row=4, column=2)
+
+        self.load_button = tk.Button(root, text="Load Graph", command=self.load_graph).grid(row=5, column=0)
+
+        self.save_button = tk.Button(root, text="Save Graph", command=self.save_graph).grid(row=5, column=1)
+
+        self.clear_button = tk.Button(root, text="Clear Graph", command=self.clear_graph).grid(row=5, column=2)
+
+        tk.Button(root, text="do the line", command=self.line).grid(row=6, column=0)
+
+    def clear_graph(self):
+        self.graph.clear()
+        self.update_graph_display()
+
+    def save_graph(self):
+        file_path = filedialog.asksaveasfilename(defaultextension=".pkl", filetypes=[("Pickle Files", "*.pkl"), ("All Files", "*.*")])
+        if file_path:
+            with open(file_path, "wb") as f:
+                pickle.dump(self.graph, f)
+    
+    def load_graph(self):
+        file_path = filedialog.askopenfilename(filetypes=[("Pickle Files", "*.pkl"), ("All Files", "*.*")])
+        if file_path:
+            with open(file_path, "rb") as f:
+                self.graph = pickle.load(f)
+        self.update_graph_display()
 
     def line(self):
         self.add_node(string = str(0))
         for i in range(1, 10):
             self.add_node(string = str(i))
             self.add_edge(str(i), str(i-1))
-            self.blowup()
             print("CALCULATING FOR " + str(i) + " NODES")
             self.calculate()
-            self.unblowup()
 
     def add_node(self, string=None):
         if string == None:
@@ -77,14 +104,15 @@ class GraphInputGUI:
             inverse_node = f"-{node}"
             inverse_nodes[node] = inverse_node  # Store inverse node for later reference
             self.graph.add_node(inverse_node)  # Add inverse node to the graph    
-            new_edges.append((node, inverse_node))  # Connect node to its inverse
-    
+               
         # Add connections between inverses of connected nodes
         for node1, node2 in self.graph.edges:
             if node1 in inverse_nodes and node2 in inverse_nodes:
                 inverse_node1 = inverse_nodes[node1]
                 inverse_node2 = inverse_nodes[node2]
                 new_edges.append((inverse_node1, inverse_node2))  # Connect inverses
+                new_edges.append((inverse_node1, node2))
+                new_edges.append((node1, inverse_node2))
     
         # Add all new edges to the graph
         self.graph.add_edges_from(new_edges)
@@ -133,6 +161,11 @@ class GraphInputGUI:
         canvas.get_tk_widget().pack()
 
     def calculate(self):
+        self.blowup()
+        self.inner_calculate()
+        self.unblowup()
+        
+    def inner_calculate(self):
         cliques = list(nx.find_cliques(self.graph))
     
         # Generate all valid subcliques without inverse/uninverse conflicts
@@ -158,8 +191,8 @@ class GraphInputGUI:
                     matrix[clique_index[alpha]][clique_index[beta]] = 1
     
         # Debugging: Print the number of cliques and verify matrix size
-#        print(f"Number of valid cliques: {len(all_cliques)}")
-#        print(f"Matrix size: {len(matrix)}x{len(matrix)}")
+        print(f"Number of valid cliques: {len(all_cliques)}")
+        print(f"Matrix size: {len(matrix)}x{len(matrix)}")
     
         # Prepare the output: Create a string for matrix display with clique labels
         matrix_str = "   " + "\t".join([str(sorted(clique)) for clique in all_cliques]) + "\n"
@@ -173,7 +206,10 @@ class GraphInputGUI:
         values, _ = LA.eig(A)
         largesteigenwert = np.argmax(values)
         print(values[largesteigenwert])
-
+        self.eigenwert_label.config(text="The largest Perron-Frobenius eigenvalue has value " + str(values[largesteigenwert]))
+        if np.any(values == 0):
+            print("not invertable")
+        
     def has_inverse_in_clique(self, clique):
         for node in clique:
             if node.startswith("-"):
